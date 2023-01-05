@@ -1,0 +1,5 @@
+output_dir/
+demo/
+log_dir/
+checkpoint.pth
+wandb/
