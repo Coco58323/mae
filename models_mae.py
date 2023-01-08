@@ -127,8 +127,6 @@ class MaskedAutoencoderViT(nn.Module):
         Per-sample shuffling is done by argsort random noise.
         x: [N, L, D], sequence
         """
-        128*62*90
-        128*(62*mask_ratio)*90
         N, L, D = x.shape  # batch, length, dim
         len_keep = int(L * (1 - mask_ratio))
         
@@ -209,8 +207,6 @@ class MaskedAutoencoderViT(nn.Module):
         pred: [N, L, p*p*3]
         mask: [N, L], 0 is keep, 1 is remove, 
         """
-        decoder 128*62*25
-        x:      128*62*25
         N,T,C,F = imgs.shape
         target = imgs.permute(0,2,1,3).reshape(N,C,-1)
         # target = self.patchify(imgs)
