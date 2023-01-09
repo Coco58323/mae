@@ -1,0 +1,41 @@
+code: 
+  local_dir: . 
+description: MAE pretrained for SEED 
+environment: 
+  image: yuchen/forecaster:sing 
+  registry: japanv100cr.azurecr.io 
+  username: japanv100cr 
+  setup: 
+  - pip install -r requirements.txt
+  - pip install tensorboard
+search: 
+  job_template: 
+    name: MAE_{depth}_{head}_{window_size}_{mask_ratio}_{seed}
+    sku: G1
+    sla_tier: basic 
+    command: 
+    - python -m main_pretrain.py --depth {depth} --seed {seed} --head {head} --window {window_size} --mask_ratio {mask_ratio}
+    submit_args:
+      env:
+        {AMLT_DOCKERFILE_TEMPLATE: default}
+  type: grid 
+  max_trials: 1 
+  params: 
+    - name: depth
+      spec: discrete
+      values: [4,6]
+    - name: head 
+      spec: discrete 
+      values: [3,6,9] 
+    - name: window_size 
+      spec: discrete 
+      values: [1,5,10]
+    - name: mask_ratio
+      spec: discrete
+      values: [0.65,0.75]
+    - name: seed 
+      spec: discrete 
+      values: [42, 51, 1024] 
+target: 
+  name: msroctovc 
+  service: sing

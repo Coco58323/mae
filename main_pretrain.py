@@ -15,6 +15,7 @@ import numpy as np
 import os
 import time
 from pathlib import Path
+import logging
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -33,7 +34,16 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models_mae
 
 from engine_pretrain import train_one_epoch
-
+logging.basicConfig(
+  level=logging.INFO,
+  handlers=[
+    logging.StreamHandler(sys.stdout),
+    logging.FileHandler(
+      os.path.join(os.environ.get("AMLT_LOGS_DIR", "."), "mnist.txt"), mode="w"
+    ),
+  ],
+)
+log_writer = SummaryWriter(os.environ.get("AMLT_OUTPUT_DIR", "."), flush_secs=30)
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
@@ -50,12 +60,23 @@ def get_args_parser():
     parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
 
-    parser.add_argument('--mask_ratio', default=0.75, type=float,
+    parser.add_argument('--embed_size', default=18, type=int,
+                        help='embed size')
+
+    parser.add_argument('--window', default=18, type=int,
+                        help='window size')
+
+    parser.add_argument('--mask_ratio', default=0.7, type=float,
                         help='Masking ratio (percentage of removed patches).')
+
+    parser.add_argument('--mlp_ratio', default=4., type=float,
+                        help='MLP depth')
+    parser.add_argument('--depth', default=6, type=float,
+                        help='encoder depth')
 
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
-    parser.set_defaults(norm_pix_loss=False)
+    parser.set_defaults(norm_pix_loss=True)
 
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
@@ -75,7 +96,7 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
 
-    parser.add_argument('--output_dir', default='./output_dir',
+    parser.add_argument('--output_dir', default=os.getenv("AMLT_OUTPUT_DIR", "/tmp"),
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
                         help='path where to tensorboard log')
@@ -126,7 +147,7 @@ def main(args):
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     from util import seeddata
-    dataset_train = seeddata.SEEDDataset(individual_index=-1,addtime=True,dataset_name='train')
+    dataset_train = seeddata.SEEDDataset(window=args.window,prefix=os.environ.get("AMLT_DATA_DIR", "."),individual_index=-1,addtime=True,dataset_name='train')
     # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     print(dataset_train)
 
@@ -140,11 +161,11 @@ def main(args):
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
-    if global_rank == 0 and args.log_dir is not None:
-        os.makedirs(args.log_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.log_dir)
-    else:
-        log_writer = None
+    # if global_rank == 0 and args.log_dir is not None:
+    #     os.makedirs(args.log_dir, exist_ok=True)
+    #     log_writer = SummaryWriter(log_dir=args.log_dir)
+    # else:
+    #     log_writer = None
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train,
@@ -155,7 +176,12 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](
+        window=args.window,
+        embed_dim=args.embed_dim*args.window,depth=args.depth,num_heads=args.head,
+        decoder_embed_dim=args.embed_dim*args.window,decoder_depth=args.depth,decoder_num_heads=args.head,
+        mlp_ratio=args.mlp_ratio,
+        norm_pix_loss=args.norm_pix_loss,mask_ratio=args.mask_ratio,)
 
     model.to(device)
 
@@ -196,11 +222,10 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 150 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
-
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
 
@@ -218,6 +243,4 @@ def main(args):
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

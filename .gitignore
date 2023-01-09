@@ -3,3 +3,4 @@ demo/
 log_dir/
 checkpoint.pth
 wandb/
+amlt/

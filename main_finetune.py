@@ -22,7 +22,6 @@ import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 
 import timm
-import wandb
 # assert timm.__version__ == "0.3.2" # version check
 from timm.models.layers import trunc_normal_
 from timm.data.mixup import Mixup
@@ -41,7 +40,7 @@ from engine_finetune import train_one_epoch, evaluate
 
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('MAE fine-tuning for image classification', add_help=False)
+    parser = argparse.ArgumentParser('MAE fine-tuning for SEED', add_help=False)
     parser.add_argument('--batch_size', default=128, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=100, type=int)
@@ -157,9 +156,6 @@ def get_args_parser():
 
 
 def main(args):
-    wandb.init(project = 'SEED',
-               name = 'mae w/o pretrain 100 epoch -2'
-              )
     misc.init_distributed_mode(args)
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -343,7 +339,6 @@ def main(args):
                         'epoch': epoch,
                         'n_parameters': n_parameters}
         
-        wandb.log({"testacc":test_stats['acc1'],'trainloss':train_stats['loss'],'testloss':test_stats['loss']})
         
         if args.log_dir and misc.is_main_process():
             if log_writer is not None:
